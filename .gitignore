@@ -1,0 +1,7 @@
+build/
+.pio/
+.arduino/
+*.elf
+*.map
+*.bin
+*.zip

@@ -1,0 +1,119 @@
+name: Build ESP32-S3 Super Mini OLED
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Compile firmware
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out firmware
+        uses: actions/checkout@v4
+
+      - name: Set up Arduino CLI
+        uses: arduino/setup-arduino-cli@v2
+
+      - name: Install ESP32-S3 core
+        run: |
+          arduino-cli core update-index \
+            --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          arduino-cli core install esp32:esp32@3.3.4 \
+            --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+
+      - name: Fetch firmware libraries
+        uses: actions/checkout@v4
+        with:
+          repository: marian-craciunescu/ESP32Ping
+          ref: "1.6"
+          path: deps/ESP32Ping
+      - uses: actions/checkout@v4
+        with:
+          repository: ESP32Async/AsyncTCP
+          ref: v3.4.8
+          path: deps/AsyncTCP
+      - uses: actions/checkout@v4
+        with:
+          repository: stevemarple/MicroNMEA
+          ref: v2.0.6
+          path: deps/MicroNMEA
+      - uses: actions/checkout@v4
+        with:
+          repository: ESP32Async/ESPAsyncWebServer
+          ref: v3.8.1
+          path: deps/ESPAsyncWebServer
+      - uses: actions/checkout@v4
+        with:
+          repository: h2zero/NimBLE-Arduino
+          ref: v2.3.8
+          path: deps/NimBLE-Arduino
+      - uses: actions/checkout@v4
+        with:
+          repository: bblanchon/ArduinoJson
+          ref: v6.18.2
+          path: deps/ArduinoJson
+      - uses: actions/checkout@v4
+        with:
+          repository: ivanseidel/LinkedList
+          ref: v1.3.3
+          path: deps/LinkedList
+      - uses: actions/checkout@v4
+        with:
+          repository: plerup/espsoftwareserial
+          ref: 8.1.0
+          path: deps/EspSoftwareSerial
+
+      - name: Apply upstream ESP32-3.3.x linker compatibility
+        run: |
+          for platform_file in $(find "$HOME/.arduino15/packages/esp32/hardware/esp32" -name platform.txt); do
+            sed -i 's/compiler.c.elf.extra_flags=/compiler.c.elf.extra_flags=-Wl,-zmuldefs /' "$platform_file"
+          done
+          for flags_file in $(find "$HOME/.arduino15/packages/esp32/tools/esp32-arduino-libs" -name cpp_flags); do
+            sed -i 's/-fexceptions/-fno-exceptions/g' "$flags_file"
+          done
+
+      - name: Compile ESP32-S3 Super Mini firmware
+        run: |
+          mkdir -p build
+          arduino-cli compile \
+            --fqbn "esp32:esp32:esp32s3:PartitionScheme=min_spiffs,FlashSize=4M" \
+            --libraries "$GITHUB_WORKSPACE/deps" \
+            --build-path "$GITHUB_WORKSPACE/build" \
+            --build-property "compiler.cpp.extra_flags=-DMARAUDER_S3_SUPERMINI" \
+            --warnings none \
+            "$GITHUB_WORKSPACE/esp32_marauder"
+
+      - name: Create merged flash image
+        run: |
+          python -m pip install esptool==4.8.1
+          boot_app0="$(find "$HOME/.arduino15/packages/esp32/hardware/esp32/3.3.4" -name boot_app0.bin -print -quit)"
+          test -n "$boot_app0"
+          test -f build/esp32_marauder.ino.bootloader.bin
+          test -f build/esp32_marauder.ino.partitions.bin
+          test -f build/esp32_marauder.ino.bin
+          mkdir -p firmware
+          cp build/esp32_marauder.ino.bin firmware/esp32-s3-super-mini-oled-app.bin
+          cp build/esp32_marauder.ino.bootloader.bin firmware/bootloader.bin
+          cp build/esp32_marauder.ino.partitions.bin firmware/partitions.bin
+          cp "$boot_app0" firmware/boot_app0.bin
+          python -m esptool --chip esp32s3 merge_bin \
+            --output firmware/esp32-s3-super-mini-oled-merged.bin \
+            --flash_mode dio --flash_freq 80m --flash_size 4MB \
+            0x0 build/esp32_marauder.ino.bootloader.bin \
+            0x8000 build/esp32_marauder.ino.partitions.bin \
+            0xe000 "$boot_app0" \
+            0x10000 build/esp32_marauder.ino.bin
+
+      - name: Upload firmware files
+        uses: actions/upload-artifact@v4
+        with:
+          name: esp32-s3-super-mini-oled-firmware
+          path: firmware/
+          if-no-files-found: error
+          retention-days: 30
