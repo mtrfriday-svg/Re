@@ -51,7 +51,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: h2zero/NimBLE-Arduino
-          ref: v2.3.8
+          ref: "2.3.8"
           path: deps/NimBLE-Arduino
       - uses: actions/checkout@v4
         with:
