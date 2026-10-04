@@ -97,8 +97,10 @@ jobs:
           test -f build/esp32_marauder.ino.bootloader.bin
           test -f build/esp32_marauder.ino.partitions.bin
           test -f build/esp32_marauder.ino.bin
+          test -f build/esp32_marauder.ino.elf
           mkdir -p firmware
           cp build/esp32_marauder.ino.bin firmware/esp32-s3-super-mini-oled-app.bin
+          cp build/esp32_marauder.ino.elf firmware/esp32-s3-super-mini-oled.elf
           cp build/esp32_marauder.ino.bootloader.bin firmware/bootloader.bin
           cp build/esp32_marauder.ino.partitions.bin firmware/partitions.bin
           cp "$boot_app0" firmware/boot_app0.bin
