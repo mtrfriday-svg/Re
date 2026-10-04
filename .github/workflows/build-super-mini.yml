@@ -69,6 +69,27 @@ jobs:
           ref: 8.1.0
           path: deps/EspSoftwareSerial
 
+      - name: Apply NimBLE timer teardown fix
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          source_path = Path("deps/NimBLE-Arduino/src/nimble/nimble/host/src/ble_hs.c")
+          source = source_path.read_text()
+
+          old = (
+              "        ble_npl_callout_stop(&ble_hs_timer);\n"
+              "        ble_npl_callout_deinit(&ble_hs_timer);\n"
+          )
+          new = "        ble_npl_callout_stop(&ble_hs_timer);\n"
+
+          if source.count(old) != 1:
+              raise SystemExit("Expected NimBLE timer code not found; refusing to build.")
+
+          source_path.write_text(source.replace(old, new, 1))
+          print("Applied NimBLE timer teardown fix.")
+          PY
+
       - name: Apply upstream ESP32-3.3.x linker compatibility
         run: |
           for platform_file in $(find "$HOME/.arduino15/packages/esp32/hardware/esp32" -name platform.txt); do
